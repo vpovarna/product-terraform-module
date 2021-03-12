@@ -368,4 +368,4 @@ Output:
 Removed product.test3
 Successfully removed 1 resource instance(s).`
 
-To delete all the created resporces, run `terraform destroy`. You can see that there are no more products on the server by accessing: `http://localhost:18010/products`
+To delete all the created resources, run `terraform destroy`. You can see that there are no more products on the server by accessing: `http://localhost:18010/products`
