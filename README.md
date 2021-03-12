@@ -9,7 +9,7 @@ Link: https://github.com/vpovarna/terraform-provider-product-api
 
 ## Check the installed terraform version
 ```
-$ terraform --version
+terraform --version
 ```
 
 ## Initialize provider
