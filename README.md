@@ -22,7 +22,7 @@ provider "product" {
   port    = "18010"
 }
 ```
-Run `terrafom init` to initialize the provider
+Run `terraform init` to initialize the provider
 
 ## Add terraform version constrains inside the module
 Add the following block inside the terraform.tf file.
@@ -128,7 +128,7 @@ testProduct = Test Value
 testProductPrice = 11
 ```
 
-If we already run this, and if we just want to see the output values, we can run: `terraform output`:
+If we just want to see the output values, we can run: `terraform output`:
 ```
 $ terraform output
 testProduct = Test Value
@@ -201,8 +201,8 @@ The test2 product will be updated in place, and will be ask for confirmation.
       ~ price = 10 -> 1
     }
 ```
-- Add variables value to a `terraform.tfvars` file
-Create a new file: `terraform.tfvars` inside the module, and add the: `newPrice = 2.00` value to it. Terraform will automatically loading the file for you. 
+- Add variables value to a `terraform.tfvars` file.
+Create a new file: `terraform.tfvars` inside the module, and add the: `newPrice = 2.00` variable to it. Terraform will automatically loading the file for you. 
 Run: `terraform apply`
 The value will be loaded and the `test2` product will be updated:
 ```
@@ -271,14 +271,14 @@ In the `main.tf` file add the following block:
 
 ```
 resource "product" "test4" {
-  pid   = 4
+  pid   = 100 + count.index
   name  = "${var.name}-${count.index}"
   price = var.price
   count = var.productCount
 }
 ```
 
-It dependts in a couple of variables. So let's add them to the `variables.tf` file:
+The resource requires a couple of variables. So let's add them to the `variables.tf` file:
 ```
 variable "productCount" {
   description = "Number of test products"
@@ -340,7 +340,7 @@ Plan: 4 to add, 0 to change, 0 to destroy.
 ## If conditions:
 Add the following block to the `main.tf` file:
 ```
-resource "product" "test6" {
+resource "product" "test5" {
   pid   = 6
   name  = "LastTest"
   price = var.higherPrice ? 100.00 : 5
@@ -348,6 +348,11 @@ resource "product" "test6" {
 ```
 In `variables.tf` add the following variable definition:
 ```
+variable "higherPrice" {
+    description = "price condition"
+    type        = bool
+    default     = true
+}
 ```
 
 Run `terraform plan` and the output should be:
@@ -361,11 +366,161 @@ Run `terraform plan` and the output should be:
     }
 ```
 
-## Delete the created product
+## Create multiple resources using for_each
+
+Let's define a new variable of type map in `variables.tf` file:
+```
+variable "custom_products" {
+  description = "Product maps"
+  type        = map(string)
+  default = {
+    Iphone = 10.00
+    IPad = 20.00
+  }
+}
+```
+
+To use this variable, add the following block in `main.tf`:
+```
+resource "product" "test6" {
+  for_each = var.custom_products
+
+  pid   = 7
+  name  = each.key
+  price = each.value
+}
+```
+
+Run `terraform plan`. The output should be:
+```
+An execution plan has been generated and is shown below.
+Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # product.test6["IPad"] will be created
+  + resource "product" "test6" {
+      + id    = (known after apply)
+      + name  = "IPad"
+      + pid   = 7
+      + price = 20
+    }
+
+  # product.test6["Iphone"] will be created
+  + resource "product" "test6" {
+      + id    = (known after apply)
+      + name  = "Iphone"
+      + pid   = 7
+      + price = 10
+    }
+
+Plan: 2 to add, 0 to change, 0 to destroy.
+```
+Both products have the same pid value, so we need a different structure.
+
+We should be able to fix this, using an object structure. 
+Let's modify the `custom_products` variable from `variable.tf` file with:
+```
+variable "custom_products" {
+  description = "Product maps"
+  type        = map(object({
+      pid   = number
+      name  = string
+      price = number
+  }))
+  default = {
+      iphone = {
+          pid   = 21
+          name  = "Iphone"
+          price = 20.00
+      },
+      ipad = {
+          pid   = 22
+          name  = "Ipad"
+          price = 100.00
+      }
+  }
+}
+```
+
+The product `test6` needs to be modified as well:
+```
+resource "product" "test6" {
+  for_each = var.custom_products
+
+  pid   = each.value.pid
+  name  = each.value.name
+  price = each.value.price
+}
+```
+
+Run: `terraform.plan`. The output should be:
+```
+An execution plan has been generated and is shown below.
+Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # product.test6["ipad"] will be created
+  + resource "product" "test6" {
+      + id    = (known after apply)
+      + name  = "Ipad"
+      + pid   = 22
+      + price = 100
+    }
+
+  # product.test6["iphone"] will be created
+  + resource "product" "test6" {
+      + id    = (known after apply)
+      + name  = "Iphone"
+      + pid   = 21
+      + price = 20
+    }
+
+Plan: 2 to add, 0 to change, 0 to destroy.
+```
+
+## Remove a resource from the state
 To delete a specific resource, run: `terraform state rm 'product.test3'`
 Output: 
 `$ terraform state rm 'product.test3'
 Removed product.test3
 Successfully removed 1 resource instance(s).`
+
+Items removed from the Terraform state are not physically destroyed. Items removed from the Terraform state are only no longer managed by Terraform. 
+
+`test3` is still available on the server: `http://localhost:18010/product/3`
+
+## Destroying products
+
+Delete a specific resource type name: `terraform destroy -target product.test6 `
+Output:
+```
+An execution plan has been generated and is shown below.
+Resource actions are indicated with the following symbols:
+  - destroy
+
+Terraform will perform the following actions:
+
+  # product.test6["ipad"] will be destroyed
+  - resource "product" "test6" {
+      - id    = "22" -> null
+      - name  = "Ipad" -> null
+      - pid   = 22 -> null
+      - price = 100 -> null
+    }
+
+  # product.test6["iphone"] will be destroyed
+  - resource "product" "test6" {
+      - id    = "21" -> null
+      - name  = "Iphone" -> null
+      - pid   = 21 -> null
+      - price = 20 -> null
+    }
+
+Plan: 0 to add, 0 to change, 2 to destroy.
+```
 
 To delete all the created resources, run `terraform destroy`. You can see that there are no more products on the server by accessing: `http://localhost:18010/products`
